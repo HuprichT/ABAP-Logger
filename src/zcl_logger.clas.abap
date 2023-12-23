@@ -146,9 +146,15 @@ CLASS zcl_logger DEFINITION
         VALUE(detailed_msg) TYPE bal_s_msg.
     METHODS add_bapi_status_result
       IMPORTING
-        !obj_to_log         TYPE any
+         obj_to_log         TYPE any
       RETURNING
         VALUE(detailed_msg) TYPE bal_s_msg.
+    METHODS add_oref_loggable_object
+      IMPORTING
+        i_obj_to_log TYPE any
+        i_context    TYPE any
+        i_type       TYPE symsgty
+      RAISING cx_sy_move_cast_error.
 ENDCLASS.
 
 
@@ -619,31 +625,10 @@ CLASS ZCL_LOGGER IMPLEMENTATION.
       detailed_msg = add_bapi_status_result( obj_to_log ).
     ELSEIF msg_type->type_kind = cl_abap_typedescr=>typekind_oref.
       TRY.
-          "BEGIN this could/should be moved into its own method
-          loggable ?= obj_to_log.
-          loggable_object_messages = loggable->get_message_table( ).
-          LOOP AT loggable_object_messages ASSIGNING <loggable_object_message>.
-            IF <loggable_object_message>-symsg IS NOT INITIAL.
-              MOVE-CORRESPONDING <loggable_object_message>-symsg TO symsg.
-              symsg-msgty = <loggable_object_message>-type.
-              zif_logger~add(
-                  obj_to_log    = symsg
-                  context       = context ).
-            ENDIF.
-            IF <loggable_object_message>-exception IS BOUND.
-              zif_logger~add(
-                  type          = <loggable_object_message>-type
-                  obj_to_log    = <loggable_object_message>-exception
-                  context       = context ).
-            ENDIF.
-            IF <loggable_object_message>-string IS NOT INITIAL.
-              zif_logger~add(
-                  type          = <loggable_object_message>-type
-                  obj_to_log    = <loggable_object_message>-string
-                  context       = context ).
-            ENDIF.
-          ENDLOOP.
-          "END this could/should be moved into its own method
+          add_oref_loggable_object(
+          i_obj_to_log = obj_to_log
+          i_context    = context
+          i_type       = type ).
 
         CATCH cx_sy_move_cast_error.
           IF type IS INITIAL.
@@ -729,6 +714,41 @@ CLASS ZCL_LOGGER IMPLEMENTATION.
     ENDIF.
     self = me.
   ENDMETHOD.
+
+  METHOD add_oref_loggable_object.
+
+    FIELD-SYMBOLS <loggable_object_message> TYPE zif_loggable_object=>ty_message.
+    DATA loggable_object_messages TYPE zif_loggable_object=>tty_messages.
+    DATA loggable TYPE REF TO zif_loggable_object.
+    DATA symsg TYPE symsg.
+
+    loggable ?= i_obj_to_log.
+    loggable_object_messages = loggable->get_message_table( ).
+    LOOP AT loggable_object_messages ASSIGNING <loggable_object_message>.
+      IF <loggable_object_message>-symsg IS NOT INITIAL.
+        MOVE-CORRESPONDING <loggable_object_message>-symsg TO symsg.
+        symsg-msgty = <loggable_object_message>-type.
+        zif_logger~add(
+            obj_to_log    = symsg
+            context       = i_context ).
+      ENDIF.
+      IF <loggable_object_message>-exception IS BOUND.
+        zif_logger~add(
+            type          = <loggable_object_message>-type
+            obj_to_log    = <loggable_object_message>-exception
+            context       = i_context ).
+      ENDIF.
+      IF <loggable_object_message>-string IS NOT INITIAL.
+        zif_logger~add(
+            type          = <loggable_object_message>-type
+            obj_to_log    = <loggable_object_message>-string
+            context       = i_context ).
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
 
 
   METHOD zif_logger~display_as_popup.
